@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>FoundWorkingCopyPaths</key>
+	<array/>
+	<key>LastWorkingCopyScanDate</key>
+	<date>2013-09-25T23:59:15Z</date>
+	<key>MissingFilePaths</key>
+	<array>
+		<string>/Users/javiervillegas/of_v0.7.4_osx_release/libs/openFrameworksCompiled/lib/osx/openFrameworksDebug.a</string>
+		<string>/Users/javiervillegas/of_v0.7.4_osx_release/apps/myApps/GranularVideo/bin/GranularVideoDebug.app</string>
+	</array>
+	<key>Version</key>
+	<integer>4</integer>
+</dict>
+</plist>

@@ -1,0 +1,433 @@
+#include "testApp.h"
+
+
+const int Nx = 352;
+const int Ny = 288;
+// A vector with all the frames.
+vector <cv::Mat> TheFramesInput;
+
+vector<ofVec3f> FirstGrains;
+vector<ofVec3f> SecondGrains;
+vector<ofVec3f> OutGrains;
+
+
+const int Nlast = 400;
+ofVec3f BlockDims;
+float inOp;//  overlaping porcentage
+float outOp;//  overlaping porcentage
+float NewoutOp;
+int Gs = 51; // for fixed grain size in all dimensions
+cv::Mat CurrentOutput;
+int fc=0; // frame counter
+
+
+void InitGrains(void);
+void UpdateSchedulerUpDown(int Upf, int Downf);
+bool UpdateBool;
+float CalculateScalecorrect(void);
+float ScaleCorrectFactor=1.0;
+int TheUf =1;
+
+bool doRotation = false;
+void GrainRandomizer();
+bool boolshufflegrains = false;
+bool boolfrozesomegrains = false;
+int circuIndex = Nlast-1;
+//--------------------------------------------------------------
+void testApp::setup(){
+   
+    // First creating an empty array
+    
+    BlockDims.x = Nx;
+    BlockDims.y = Ny;
+    BlockDims.z = Nlast;
+    cv::Mat AuxMat(Ny,Nx,CV_8UC3,cv::Scalar(0,0,0));
+    for (int k = 0; k< Nlast; k++){
+        TheFramesInput.push_back(AuxMat.clone());
+    }
+    
+    
+ //   vidGrabber.setVerbose(true);
+ //   vidGrabber.initGrabber(Nx,Ny);
+    
+    ofSetFrameRate(15);
+    inOp =50;
+    outOp =50;
+    NewoutOp = outOp;
+
+    InitGrains();
+    UpdateSchedulerUpDown(TheUf,1);
+    vidGrabber.initGrabber(Nx,Ny);
+    colorImg.allocate(Nx,Ny);
+	grayImage.allocate(Nx,Ny);
+}
+
+//--------------------------------------------------------------
+
+// TODO
+// change the grain vector to only x,y info
+// but two arrays: current grains and next grains
+// the t value can be used as offset when ploting
+// update cada jp the "next grain info"
+
+
+
+
+
+
+
+
+
+void testApp::update(){
+    bool bNewFrame = false;
+    
+    vidGrabber.update();
+    bNewFrame = vidGrabber.isFrameNew();
+    //
+    if (bNewFrame){
+        //
+        // circular buffer
+        colorImg.setFromPixels(vidGrabber.getPixels(), Nx,Ny);
+        cv::Mat AuxMat;
+        AuxMat = colorImg.getCvImage();
+        AuxMat.copyTo(TheFramesInput[circuIndex]);
+        fc = circuIndex;
+        // Fc has the current sample index
+        circuIndex--;
+        if (circuIndex<0){
+            circuIndex = Nlast-1;
+        }
+        
+
+    if (UpdateBool){
+        outOp = NewoutOp;
+      //UpdateScheduler();
+        UpdateSchedulerUpDown(TheUf,1);
+        if (boolshufflegrains==true){
+            GrainRandomizer();}
+        ScaleCorrectFactor =CalculateScalecorrect();
+        UpdateBool = false;
+    }
+    // calculate new output size:
+    int outOsamp = (int)(ceil(Gs*outOp/100.0));
+    int ojp = Gs - outOsamp;
+ 
+    // input jump size
+    int Osamp = (int)(ceil(Gs*inOp/100.0));
+    int jp = Gs - Osamp;
+
+    
+    int outYsize = Gs + TheUf*ojp*((BlockDims.y-Gs)/jp);
+    int outXsize = Gs + TheUf*ojp*((BlockDims.x-Gs)/jp);
+    
+   // creating an empty frame for the output
+
+    CurrentOutput =cv::Mat::zeros(outYsize,outXsize, CV_8UC3);
+ 
+    // pointer to output data:
+    
+    unsigned char *output = (unsigned char*)(CurrentOutput.data);
+    
+    // running throught the list of grains
+    
+    for (int g =0; g < FirstGrains.size(); g++) {
+        
+        
+        // two halves
+        for (int m=0; m<2; m++) {
+          // copy the grain from the input
+            int IntiFrame = (m==1)?(fc + (int)FirstGrains[g].z)%Nlast:((fc + (int)SecondGrains[g].z)%Nlast);
+            
+            unsigned char *input = (unsigned char*)(TheFramesInput[IntiFrame].data);
+            for (int x =0; x<Gs; x++) {
+                for (int y=0; y<Gs; y++) {
+                    
+                    float rIn,gIn,bIn;
+                    float rOut,gOut,bOut;
+                    float Scale;
+                    Scale = ((0.5*0.5*0.5)*(1.0 -cosf(2*PI*x/(float)(Gs-1)))*
+                             (1.0 -cosf(2*PI*y/(float)(Gs-1)))*
+                             (1.0 -cosf(2*PI*(m*(Gs-1)/2.0 +(fc%jp))/(float)(Gs-1))));
+                    // m =0 is the next grain
+                    
+                    Scale/=(ScaleCorrectFactor*ScaleCorrectFactor*ScaleCorrectFactor);
+                    // pixels at the inut
+                    int yindIn;
+                    int xindIn;
+                    if (m==1) {
+                        xindIn = x + FirstGrains[g].x;
+                        yindIn = y + FirstGrains[g].y;
+                    }
+                    else {
+                        xindIn = x + SecondGrains[g].x;
+                        yindIn = y + SecondGrains[g].y;
+                    }
+                    
+                    bIn = (float)input[(int)(3*BlockDims.x * (yindIn) + 3*(xindIn)) ] ;
+                    gIn = (float)input[(int)(3*BlockDims.x * (yindIn) + 3*(xindIn) + 1)];
+                    rIn = (float)input[(int)(3*BlockDims.x * (yindIn) + 3*(xindIn) + 2)];
+                    //pixels at the output
+                    // output indexes
+                    int xindOut = x + OutGrains[g].x;
+                    int yindOut = y + OutGrains[g].y;
+                    
+                    
+                    bOut = (float)output[3*CurrentOutput.cols * (yindOut) + 3*(xindOut) ] ;
+                    gOut = (float)output[3*CurrentOutput.cols * (yindOut) + 3*(xindOut) + 1];
+                    rOut = (float)output[3*CurrentOutput.cols * (yindOut) + 3*(xindOut) + 2];
+                    
+
+                    output[3*CurrentOutput.cols * (yindOut) + 3*(xindOut) ] = (uchar)(bOut + Scale*bIn);
+                    output[3*CurrentOutput.cols * (yindOut) + 3*(xindOut) + 1]=(uchar)(gOut +Scale*gIn);
+                    output[3*CurrentOutput.cols * (yindOut) + 3*(xindOut) + 2]=(uchar)(rOut + Scale*rIn);
+                    
+                    
+                
+                
+                } //y
+            } //x
+            
+        }//m
+        
+        if ((fc%jp) == jp-1) {
+            FirstGrains[g] = SecondGrains[g];
+        }
+        
+        
+        
+    }//g
+    
+    }
+    
+}
+
+
+
+
+//--------------------------------------------------------------
+void testApp::draw(){
+	ofSetHexColor(0xffffff);
+    ofxCvColorImage AuxDrawImage;
+
+    AuxDrawImage.allocate(TheFramesInput[fc].cols, TheFramesInput[fc].rows);
+    AuxDrawImage = TheFramesInput[fc].data;
+    AuxDrawImage.draw(0, 0);
+    
+    ofxCvColorImage AuxDrawImage2;
+    
+    AuxDrawImage2.allocate(CurrentOutput.cols, CurrentOutput.rows);
+    AuxDrawImage2 = CurrentOutput.data;
+    AuxDrawImage2.draw(0, AuxDrawImage.height);
+   
+
+    
+    
+    fc++;
+    if(fc>BlockDims.z-1){fc=0;}
+    
+}
+
+
+void InitGrains(){
+// calculates the grains input and output positions.
+    FirstGrains.clear();
+    SecondGrains.clear();
+    OutGrains.clear();
+    
+    // input jump
+    int Osamp = (int)(ceil(Gs*inOp/100.0));
+    int jp = Gs - Osamp;
+    
+    // output jump
+    int outOsamp = (int)(ceil(Gs*outOp/100.0));
+    int ojp = Gs - outOsamp;
+    
+    
+    for (int y = 0; y < (BlockDims.y - Gs); y+=jp) {
+        for (int x=0; x< (BlockDims.x - Gs); x+=jp) {
+                ofVec3f tempStorage;
+                tempStorage.x = x;
+                tempStorage.y=y;
+                tempStorage.z=0;
+                FirstGrains.push_back(tempStorage);
+                SecondGrains.push_back(tempStorage);
+                OutGrains.push_back(tempStorage);
+        }
+    }
+
+}
+
+
+void GrainRandomizer(){
+    for (int g =0; g < SecondGrains.size(); g++) {
+        float aca = ofRandom(100);
+        if(aca<30){
+            SecondGrains[g].z = (int)ofRandom(Nlast/4.0);
+        }
+    
+    
+    }
+    
+    
+}
+
+void UpdateSchedulerUpDown(int Upf, int Downf){
+    // calculates the grains output position after upsampling or down sampling
+    FirstGrains.clear();
+    SecondGrains.clear();
+    OutGrains.clear();
+    
+    // input jump
+    int Osamp = (int)(ceil(Gs*inOp/100.0));
+    int jp = Gs - Osamp;
+    
+    // output jump
+    int outOsamp = (int)(ceil(Gs*outOp/100.0));
+    int ojp = Gs - outOsamp;
+    
+    // First Filling with Upsampling:
+    
+    for (int y = 0; y < Upf*ojp*(BlockDims.y-Gs)/jp; y+=ojp) {
+        for (int x=0; x< Upf*ojp*(BlockDims.x-Gs)/jp; x+=ojp) {
+          
+                ofVec3f tempStorageIn;
+                tempStorageIn.x = jp*(x/ojp)/Upf;
+                tempStorageIn.y = jp*(y/ojp)/Upf;
+                tempStorageIn.z=0;
+                FirstGrains.push_back(tempStorageIn);
+                SecondGrains.push_back(tempStorageIn);
+            
+                ofVec3f tempStorageOut;
+                tempStorageOut.x = x;
+                tempStorageOut.y = y;
+                tempStorageOut.z = 0;
+                OutGrains.push_back(tempStorageOut);
+                
+        }
+    }
+    
+}
+
+
+
+
+
+float CalculateScalecorrect(void){
+
+    vector<float> Tempovec(10*Gs);
+    // initializing
+    for (int k=0; k<(10*Gs); k++) {
+        Tempovec[k]=0.0;
+    }
+    
+    // output jump
+    int outOsamp = (int)(ceil(Gs*outOp/100.0));
+    int ojp = Gs - outOsamp;
+    
+    // overlaping
+    for (int k=0; k<(9*Gs); k+=ojp) {
+        for (int n=0; n<Gs; n++) {
+            Tempovec[k+n]+= 0.5*(1.0 -cosf(2*PI*n/(float)(Gs-1)));
+        }
+    }
+
+    // finding the max;
+    float TheMax =0;
+    for (int k=0; k<(10*Gs); k++) {
+        if(Tempovec[k]>TheMax){
+            TheMax = Tempovec[k];
+        }
+    }
+
+    return TheMax;
+
+}
+
+
+
+//--------------------------------------------------------------
+void testApp::keyPressed(int key){
+    
+    switch (key) {
+        case 'u':
+            TheUf++;
+            if(TheUf>5){TheUf=1;}
+            UpdateBool =true;
+
+            break;
+            
+        case 'r':
+            boolshufflegrains = !boolshufflegrains;
+            UpdateBool =true;
+            
+            break;
+        case OF_KEY_RIGHT:
+            NewoutOp++;
+            UpdateBool = true;
+            
+            break;
+        case OF_KEY_LEFT:
+            NewoutOp--;
+            UpdateBool = true;
+            
+            break;
+        case 't':
+            boolfrozesomegrains = !boolfrozesomegrains;
+            UpdateBool = true;
+            break;
+            
+        case OF_KEY_RETURN:
+            boolfrozesomegrains = false;
+            boolshufflegrains = false;
+            TheUf = 1;
+            NewoutOp = inOp;
+            UpdateBool = true;
+            break;
+        case 'b':
+            break;
+        default:
+            break;
+    }
+    
+    
+}
+
+//--------------------------------------------------------------
+void testApp::keyReleased(int key){
+    
+}
+
+//--------------------------------------------------------------
+void testApp::mouseMoved(int x, int y){
+    
+}
+
+//--------------------------------------------------------------
+void testApp::mouseDragged(int x, int y, int button){
+    
+}
+
+//--------------------------------------------------------------
+void testApp::mousePressed(int x, int y, int button){
+    
+}
+
+//--------------------------------------------------------------
+void testApp::mouseReleased(int x, int y, int button){
+    
+}
+
+//--------------------------------------------------------------
+void testApp::windowResized(int w, int h){
+    
+}
+
+//--------------------------------------------------------------
+void testApp::gotMessage(ofMessage msg){
+    
+}
+
+//--------------------------------------------------------------
+void testApp::dragEvent(ofDragInfo dragInfo){ 
+    
+}

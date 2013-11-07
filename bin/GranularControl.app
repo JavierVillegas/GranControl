@@ -1,0 +1,1 @@
+/Users/javiervillegas/of_v0.7.4_osx_release/apps/myApps/GranularControl/DerivedData/GranularControl/Build/Intermediates/ArchiveIntermediates/GranularControl/InstallationBuildProductsLocation/Users/javiervillegas/Applications/GranularControl.app
